@@ -1,5 +1,6 @@
 import { type WaterEntry, type InsertWaterEntry, type Settings, type InsertSettings } from "@shared/schema";
 import { randomUUID } from "crypto";
+import { format, subDays } from "date-fns";
 
 export interface IStorage {
   getWaterEntries(date: string): Promise<WaterEntry[]>;
@@ -7,11 +8,12 @@ export interface IStorage {
   deleteWaterEntry(id: string): Promise<void>;
   getSettings(): Promise<Settings | undefined>;
   updateSettings(settings: InsertSettings): Promise<Settings>;
+  getHistory(days: number): Promise<{ date: string; amount: number; goal: number }[]>;
 }
 
 export class MemStorage implements IStorage {
   private waterEntries: Map<string, WaterEntry>;
-  private settings: Settings | undefined;
+  private settings: Settings;
 
   constructor() {
     this.waterEntries = new Map();
@@ -49,10 +51,29 @@ export class MemStorage implements IStorage {
 
   async updateSettings(insertSettings: InsertSettings): Promise<Settings> {
     this.settings = {
-      ...this.settings!,
+      ...this.settings,
       ...insertSettings,
     };
     return this.settings;
+  }
+
+  async getHistory(days: number): Promise<{ date: string; amount: number; goal: number }[]> {
+    const today = new Date();
+    const history = [];
+
+    for (let i = days - 1; i >= 0; i--) {
+      const date = format(subDays(today, i), "yyyy-MM-dd");
+      const entries = await this.getWaterEntries(date);
+      const amount = entries.reduce((sum, entry) => sum + entry.amount, 0);
+      
+      history.push({
+        date,
+        amount,
+        goal: this.settings.dailyGoal,
+      });
+    }
+
+    return history;
   }
 }
 

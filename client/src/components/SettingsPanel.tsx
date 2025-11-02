@@ -4,7 +4,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Save, Plus, X } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
 
 interface SettingsPanelProps {
   dailyGoal: number;
@@ -16,7 +15,6 @@ export default function SettingsPanel({ dailyGoal, presetVolumes, onSaveSettings
   const [goal, setGoal] = useState(dailyGoal.toString());
   const [presets, setPresets] = useState<number[]>(presetVolumes);
   const [newPreset, setNewPreset] = useState("");
-  const { toast } = useToast();
 
   const handleAddPreset = () => {
     const value = parseInt(newPreset);
@@ -34,10 +32,6 @@ export default function SettingsPanel({ dailyGoal, presetVolumes, onSaveSettings
     const goalValue = parseInt(goal);
     if (goalValue && goalValue > 0 && presets.length > 0) {
       onSaveSettings(goalValue, presets);
-      toast({
-        title: "Настройки сохранены",
-        description: "Ваши настройки успешно обновлены",
-      });
     }
   };
 

@@ -1,21 +1,48 @@
-import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import HistoryChart from "@/components/HistoryChart";
 import BottomNav from "@/components/BottomNav";
 
 type NavPage = "home" | "history" | "settings";
 
-export default function History() {
-  const [currentPage, setCurrentPage] = useState<NavPage>("history");
+interface HistoryData {
+  date: string;
+  amount: number;
+  goal: number;
+}
 
-  const data = [
-    { date: '2025-10-27', amount: 2800, goal: 3000 },
-    { date: '2025-10-28', amount: 3200, goal: 3000 },
-    { date: '2025-10-29', amount: 2600, goal: 3000 },
-    { date: '2025-10-30', amount: 3400, goal: 3000 },
-    { date: '2025-10-31', amount: 2900, goal: 3000 },
-    { date: '2025-11-01', amount: 3100, goal: 3000 },
-    { date: '2025-11-02', amount: 1850, goal: 3000 },
-  ];
+export default function History() {
+  const [, setLocation] = useLocation();
+
+  const { data = [], isError } = useQuery<HistoryData[]>({
+    queryKey: ["/api/history"],
+    queryFn: async () => {
+      const response = await fetch("/api/history?days=7");
+      if (!response.ok) throw new Error("Failed to fetch history");
+      return response.json();
+    },
+  });
+
+  const handleNavigate = (page: NavPage) => {
+    if (page === "home") setLocation("/");
+    if (page === "settings") setLocation("/settings");
+  };
+
+  if (isError) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center px-4">
+          <p className="text-destructive">Произошла ошибка при загрузке истории</p>
+          <button 
+            onClick={() => window.location.reload()} 
+            className="mt-4 text-primary underline"
+          >
+            Обновить страницу
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background pb-20">
@@ -29,7 +56,7 @@ export default function History() {
           <HistoryChart data={data} />
         </div>
 
-        <BottomNav currentPage={currentPage} onNavigate={setCurrentPage} />
+        <BottomNav currentPage="history" onNavigate={handleNavigate} />
       </div>
     </div>
   );
