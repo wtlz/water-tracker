@@ -1,37 +1,58 @@
-import { type User, type InsertUser } from "@shared/schema";
+import { type WaterEntry, type InsertWaterEntry, type Settings, type InsertSettings } from "@shared/schema";
 import { randomUUID } from "crypto";
 
-// modify the interface with any CRUD methods
-// you might need
-
 export interface IStorage {
-  getUser(id: string): Promise<User | undefined>;
-  getUserByUsername(username: string): Promise<User | undefined>;
-  createUser(user: InsertUser): Promise<User>;
+  getWaterEntries(date: string): Promise<WaterEntry[]>;
+  addWaterEntry(entry: InsertWaterEntry): Promise<WaterEntry>;
+  deleteWaterEntry(id: string): Promise<void>;
+  getSettings(): Promise<Settings | undefined>;
+  updateSettings(settings: InsertSettings): Promise<Settings>;
 }
 
 export class MemStorage implements IStorage {
-  private users: Map<string, User>;
+  private waterEntries: Map<string, WaterEntry>;
+  private settings: Settings | undefined;
 
   constructor() {
-    this.users = new Map();
+    this.waterEntries = new Map();
+    this.settings = {
+      id: randomUUID(),
+      dailyGoal: 3000,
+      presetVolumes: "150,200,450,850,1000",
+    };
   }
 
-  async getUser(id: string): Promise<User | undefined> {
-    return this.users.get(id);
-  }
-
-  async getUserByUsername(username: string): Promise<User | undefined> {
-    return Array.from(this.users.values()).find(
-      (user) => user.username === username,
+  async getWaterEntries(date: string): Promise<WaterEntry[]> {
+    return Array.from(this.waterEntries.values()).filter(
+      (entry) => entry.date === date
     );
   }
 
-  async createUser(insertUser: InsertUser): Promise<User> {
+  async addWaterEntry(insertEntry: InsertWaterEntry): Promise<WaterEntry> {
     const id = randomUUID();
-    const user: User = { ...insertUser, id };
-    this.users.set(id, user);
-    return user;
+    const entry: WaterEntry = {
+      ...insertEntry,
+      id,
+      timestamp: new Date(),
+    };
+    this.waterEntries.set(id, entry);
+    return entry;
+  }
+
+  async deleteWaterEntry(id: string): Promise<void> {
+    this.waterEntries.delete(id);
+  }
+
+  async getSettings(): Promise<Settings | undefined> {
+    return this.settings;
+  }
+
+  async updateSettings(insertSettings: InsertSettings): Promise<Settings> {
+    this.settings = {
+      ...this.settings!,
+      ...insertSettings,
+    };
+    return this.settings;
   }
 }
 
