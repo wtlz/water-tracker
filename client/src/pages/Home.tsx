@@ -1,57 +1,129 @@
-import { useState } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { format } from "date-fns";
 import DailyProgress from "@/components/DailyProgress";
 import QuickInputButtons from "@/components/QuickInputButtons";
 import ManualInput from "@/components/ManualInput";
 import TodaysLog from "@/components/TodaysLog";
 import BottomNav from "@/components/BottomNav";
 import { useToast } from "@/hooks/use-toast";
+import { queryClient, apiRequest } from "@/lib/queryClient";
+import type { WaterEntry, Settings } from "@shared/schema";
+import { useLocation } from "wouter";
 
 type NavPage = "home" | "history" | "settings";
 
-interface WaterEntry {
-  id: string;
-  amount: number;
-  timestamp: Date;
-}
-
 export default function Home() {
-  const [currentPage, setCurrentPage] = useState<NavPage>("home");
+  const [, setLocation] = useLocation();
   const { toast } = useToast();
-  
-  const [dailyGoal] = useState(3000);
-  const [presetVolumes] = useState([150, 200, 450, 850, 1000]);
-  const [entries, setEntries] = useState<WaterEntry[]>([
-    { id: '1', amount: 200, timestamp: new Date('2025-11-02T08:30:00') },
-    { id: '2', amount: 450, timestamp: new Date('2025-11-02T11:15:00') },
-    { id: '3', amount: 850, timestamp: new Date('2025-11-02T14:00:00') },
-    { id: '4', amount: 350, timestamp: new Date('2025-11-02T16:45:00') },
-  ]);
+  const today = format(new Date(), "yyyy-MM-dd");
 
+  const { data: settings, isError: settingsError } = useQuery<Settings>({
+    queryKey: ["/api/settings"],
+    queryFn: async () => {
+      const response = await fetch("/api/settings");
+      if (!response.ok) throw new Error("Failed to fetch settings");
+      return response.json();
+    },
+  });
+
+  const { data: entries = [], isError: entriesError } = useQuery<WaterEntry[]>({
+    queryKey: ["/api/water-entries", today],
+    queryFn: async () => {
+      const response = await fetch(`/api/water-entries?date=${today}`);
+      if (!response.ok) throw new Error("Failed to fetch entries");
+      return response.json();
+    },
+  });
+
+  const addWaterMutation = useMutation({
+    mutationFn: async (amount: number) => {
+      const response = await apiRequest("POST", "/api/water-entries", { amount, date: today });
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/water-entries", today] });
+      queryClient.invalidateQueries({ queryKey: ["/api/history"] });
+    },
+    onError: (error) => {
+      toast({
+        title: "Ошибка",
+        description: "Не удалось добавить запись. Попробуйте еще раз.",
+        variant: "destructive",
+      });
+      console.error("Error adding water:", error);
+    },
+  });
+
+  const deleteEntryMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("DELETE", `/api/water-entries/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/water-entries", today] });
+      queryClient.invalidateQueries({ queryKey: ["/api/history"] });
+    },
+    onError: (error) => {
+      toast({
+        title: "Ошибка",
+        description: "Не удалось удалить запись. Попробуйте еще раз.",
+        variant: "destructive",
+      });
+      console.error("Error deleting entry:", error);
+    },
+  });
+
+  if (settingsError || entriesError) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center px-4">
+          <p className="text-destructive">Произошла ошибка при загрузке данных</p>
+          <button 
+            onClick={() => window.location.reload()} 
+            className="mt-4 text-primary underline"
+          >
+            Обновить страницу
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const dailyGoal = settings?.dailyGoal || 3000;
+  const presetVolumes = settings?.presetVolumes.split(",").map(Number) || [150, 200, 450, 850, 1000];
   const currentTotal = entries.reduce((sum, entry) => sum + entry.amount, 0);
 
   const handleAddWater = (amount: number) => {
-    const newEntry: WaterEntry = {
-      id: Date.now().toString(),
-      amount,
-      timestamp: new Date(),
-    };
-    setEntries([...entries, newEntry]);
-    
-    toast({
-      title: "Вода добавлена!",
-      description: `Вы добавили ${amount} мл воды`,
+    addWaterMutation.mutate(amount, {
+      onSuccess: () => {
+        toast({
+          title: "Вода добавлена!",
+          description: `Вы добавили ${amount} мл воды`,
+        });
+      },
     });
   };
 
   const handleDeleteEntry = (id: string) => {
-    setEntries(entries.filter(entry => entry.id !== id));
-    
-    toast({
-      title: "Запись удалена",
-      description: "Запись успешно удалена",
-      variant: "destructive",
+    deleteEntryMutation.mutate(id, {
+      onSuccess: () => {
+        toast({
+          title: "Запись удалена",
+          description: "Запись успешно удалена",
+          variant: "destructive",
+        });
+      },
     });
   };
+
+  const handleNavigate = (page: NavPage) => {
+    if (page === "history") setLocation("/history");
+    if (page === "settings") setLocation("/settings");
+  };
+
+  const waterEntriesWithDate = entries.map(entry => ({
+    ...entry,
+    timestamp: new Date(entry.timestamp),
+  }));
 
   return (
     <div className="min-h-screen bg-background pb-20">
@@ -76,13 +148,13 @@ export default function Home() {
 
           <div className="border-t pt-4">
             <TodaysLog 
-              entries={entries}
+              entries={waterEntriesWithDate}
               onDeleteEntry={handleDeleteEntry}
             />
           </div>
         </div>
 
-        <BottomNav currentPage={currentPage} onNavigate={setCurrentPage} />
+        <BottomNav currentPage="home" onNavigate={handleNavigate} />
       </div>
     </div>
   );
